@@ -1,0 +1,10 @@
+pandas>=1.5
+sqlalchemy>=1.4
+networkx>=3.0
+gensim>=4.3.0
+scikit-learn>=1.2
+xgboost>=1.7
+openpyxl>=3.0
+tqdm>=4.64
+python-dateutil>=2.8
+torch>=2.0.0 
