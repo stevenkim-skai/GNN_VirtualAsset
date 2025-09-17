@@ -1,0 +1,5 @@
+model,val_count,mean,std,anomaly_z2,anomaly_z3,csv
+GCN_AE,1592,1778398.375,16291265.0,1,1,recon_errors_GCN_AE.csv
+SAGE_AE,1592,59957.28515625,40967.734375,156,4,recon_errors_SAGE_AE.csv
+GAT_AE,1592,3018049.25,1117918.625,0,0,recon_errors_GAT_AE.csv
+PaperGAT_AE,1592,4197445.5,2067450.25,0,0,recon_errors_PaperGAT_AE.csv
