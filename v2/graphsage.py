@@ -118,7 +118,49 @@ class SAGEAutoEncoder(nn.Module):
         x = self.sage3(x, edge_index)  # 복원 64d (보통 마지막은 활성 미적용)
         return x
 
-model = SAGEAutoEncoder(in_dim=64, dropout=0.3, aggr="mean").to(DEVICE)
+# CSV 특성 전처리 및 Node2Vec와 결합 (삽입 위치: Node2Vec 후, SAGE-AE 학습 전에)
+# node_df는 파일 상단에서 이미 불러온 상태라 가정
+
+# 1) 주소 비어있는 행 제거
+node_df = node_df.dropna(subset=['address']).reset_index(drop=True)
+
+# 2) 컬럼 분류/강제 형변환
+feat_cols = [c for c in node_df.columns if c != "address"]
+for c in feat_cols:
+    if c in ('first_tx_time', 'last_tx_time'):
+        node_df[c] = pd.to_datetime(node_df[c], errors='coerce')
+    else:
+        node_df[c] = pd.to_numeric(node_df[c], errors='coerce')
+
+# 3) 시간 기반 파생변수 (예: 첫/마지막 거래 이후 일수)
+now_ts = pd.Timestamp.now()
+node_df['first_tx_age_days'] = (now_ts - node_df['first_tx_time']).dt.total_seconds() / 86400
+node_df['last_tx_age_days']  = (now_ts - node_df['last_tx_time']).dt.total_seconds() / 86400
+
+# 4) 로그 변환(금액/가스) — 이상치 스케일 축소
+amt_gas_cols = [c for c in feat_cols if ('amount' in c) or ('gas' in c)]
+for c in amt_gas_cols:
+    node_df[c] = np.log1p(node_df[c].fillna(0))
+
+# 5) 최종 특성 행렬 생성(타임스탬프 원본 열은 제외)
+drop_cols = ['first_tx_time', 'last_tx_time']
+feat_cols_final = [c for c in node_df.columns if c not in (['address'] + drop_cols)]
+X = node_df[feat_cols_final].fillna(0).astype(float).values
+
+# 6) 스케일링
+from sklearn.preprocessing import StandardScaler
+scaler = StandardScaler()
+X_scaled = scaler.fit_transform(X)
+# 저장(추후 추론 때 동일 스케일러 사용)
+import joblib
+joblib.dump(scaler, 'node_feature_scaler.pkl')
+
+# 7) 텐서 변환 및 결합 (Node2Vec + 피처)
+x_feat = torch.tensor(X_scaled, dtype=torch.float32).to(DEVICE)  # (N, F)
+x_in = torch.cat([x_init.to(DEVICE), x_feat], dim=1)            # (N, 64+F)
+
+# 8) 모델 입력 차원 맞추기
+model = SAGEAutoEncoder(in_dim=x_in.size(1), dropout=0.3, aggr="mean").to(DEVICE)
 
 optimizer = torch.optim.Adam(model.parameters(), lr=1e-3, weight_decay=5e-4)
 
